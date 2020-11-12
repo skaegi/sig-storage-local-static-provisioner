@@ -1,0 +1,192 @@
+---
+# Source: provisioner/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: local-both-provisioner
+  namespace: default
+  labels:
+    helm.sh/chart: provisioner-3.0.0
+    app.kubernetes.io/name: provisioner
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/instance: local-both
+---
+# Source: provisioner/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: local-both-provisioner-config
+  namespace: default
+  labels:
+    helm.sh/chart: provisioner-3.0.0
+    app.kubernetes.io/name: provisioner
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/instance: local-both
+data:
+  storageClassMap: |
+    local-block:
+      hostDir: /mnt/local-block
+      mountDir: /mnt/local-block
+      blockCleanerCommand:
+        - "/scripts/shred.sh"
+        - "2"
+      volumeMode: Block
+    local-block-fs:
+      hostDir: /mnt/local-block-fs
+      mountDir: /mnt/local-block-fs
+      blockCleanerCommand:
+        - "/scripts/shred.sh"
+        - "2"
+      volumeMode: Filesystem
+      fsType: ext4
+---
+# Source: provisioner/templates/storageclass.yaml
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: local-block
+  labels:
+    helm.sh/chart: provisioner-3.0.0
+    app.kubernetes.io/name: provisioner
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/instance: local-both
+provisioner: kubernetes.io/no-provisioner
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Delete
+---
+# Source: provisioner/templates/storageclass.yaml
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: local-block-fs
+  labels:
+    helm.sh/chart: provisioner-3.0.0
+    app.kubernetes.io/name: provisioner
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/instance: local-both
+provisioner: kubernetes.io/no-provisioner
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Delete
+---
+# Source: provisioner/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: local-both-provisioner-node-clusterrole
+  labels:
+    helm.sh/chart: provisioner-3.0.0
+    app.kubernetes.io/name: provisioner
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/instance: local-both
+rules:
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["get"]
+---
+# Source: provisioner/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: local-both-provisioner-pv-binding
+  labels:
+    helm.sh/chart: provisioner-3.0.0
+    app.kubernetes.io/name: provisioner
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/instance: local-both
+subjects:
+- kind: ServiceAccount
+  name: local-both-provisioner
+  namespace: default
+roleRef:
+  kind: ClusterRole
+  name: system:persistent-volume-provisioner
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: provisioner/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: local-both-provisioner-node-binding
+  labels:
+    helm.sh/chart: provisioner-3.0.0
+    app.kubernetes.io/name: provisioner
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/instance: local-both
+subjects:
+- kind: ServiceAccount
+  name: local-both-provisioner
+  namespace: default
+roleRef:
+  kind: ClusterRole
+  name: local-both-provisioner-node-clusterrole
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: provisioner/templates/daemonset.yaml
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: local-both-provisioner
+  namespace: default
+  labels:
+    helm.sh/chart: provisioner-3.0.0
+    app.kubernetes.io/name: provisioner
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/instance: local-both
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: provisioner
+      app.kubernetes.io/instance: local-both
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: provisioner
+        app.kubernetes.io/instance: local-both
+      annotations:
+        checksum/config: 4a58677c3f9d16569d8377a5eab07d782c64c67936ff10c77e20689c65c8ec0c
+    spec:
+      serviceAccountName: local-both-provisioner
+      containers:
+        - name: provisioner
+          image: quay.io/external_storage/local-volume-provisioner:v2.3.4
+          securityContext:
+            privileged: true
+          env:
+          - name: MY_NODE_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: spec.nodeName
+          - name: MY_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: JOB_CONTAINER_IMAGE
+            value: quay.io/external_storage/local-volume-provisioner:v2.3.4
+          ports:
+          - name: metrics
+            containerPort: 8080
+          volumeMounts:
+            - name: provisioner-config
+              mountPath: /etc/provisioner/config
+              readOnly: true
+            - name: provisioner-dev
+              mountPath: /dev
+            - name: local-block
+              mountPath: /mnt/local-block
+              mountPropagation: HostToContainer
+            - name: local-block-fs
+              mountPath: /mnt/local-block-fs
+              mountPropagation: HostToContainer
+      volumes:
+        - name: provisioner-config
+          configMap:
+            name: local-both-provisioner-config
+        - name: provisioner-dev
+          hostPath:
+            path: /dev
+        - name: local-block
+          hostPath:
+            path: /mnt/local-block
+        - name: local-block-fs
+          hostPath:
+            path: /mnt/local-block-fs

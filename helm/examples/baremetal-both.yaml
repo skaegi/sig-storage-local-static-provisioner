@@ -1,0 +1,32 @@
+classes:
+- name: local-block
+  hostDir: /mnt/local-block
+  blockCleanerCommand:
+  # Do a quick reset of the block device during its cleanup.
+  # - "/scripts/quick_reset.sh"
+  # or use dd to zero out block dev in two iterations by uncommenting these lines.
+  # - "/scripts/dd_zero.sh"
+  # - "2"
+  # or run shred utility for 2 iterations.
+  - "/scripts/shred.sh"
+  - "2"
+  # or blkdiscard utility by uncommenting the line below.
+  # - "/scripts/blkdiscard.sh"
+  volumeMode: Block
+  storageClass: true
+- name: local-block-fs
+  hostDir: /mnt/local-block-fs
+  blockCleanerCommand:
+  # Do a quick reset of the block device during its cleanup.
+  # - "/scripts/quick_reset.sh"
+  # or use dd to zero out block dev in two iterations by uncommenting these lines.
+  # - "/scripts/dd_zero.sh"
+  # - "2"
+  # or run shred utility for 2 iterations.
+  - "/scripts/shred.sh"
+  - "2"
+  # or blkdiscard utility by uncommenting the line below.
+  # - "/scripts/blkdiscard.sh"
+  volumeMode: Filesystem
+  storageClass: true
+  fsType: ext4
